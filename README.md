@@ -1,18 +1,17 @@
-# Welcome to your Lovable project
+## Important note ##
 
-## Project info
+This repository does not include backend or smart contracts since our team was made up of two non-technical members. During the hackathon, we focused on conceptualization, design, and a visual prototype (mainly CSS and basic front-end).
 
-**URL**: https://lovable.dev/projects/95f5e6b4-f62c-459e-9b09-40589c042ad2
+While we couldn’t advance on the technical development, we built the full vision of the project and are confident about its social impact and value. Our next step is to bring developers on board to take this idea into production.
+
+We strongly believe in the potential of this platform and will continue working to make it a reality.
+
+
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/95f5e6b4-f62c-459e-9b09-40589c042ad2) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
 
 **Use your preferred IDE**
 
@@ -60,14 +59,3 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/95f5e6b4-f62c-459e-9b09-40589c042ad2) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
