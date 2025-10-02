@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { 
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import lumiAvatar from '@/assets/lumi-avatar.png';
 import onboardingHero from '@/assets/onboarding-hero.png';
+import { useStellarWallet } from '@/hooks/useStellarWallet';
+import ErrorBoundary from './ErrorBoundary';
 
 type Screen = 'onboarding' | 'dashboard' | 'savings' | 'ai-chat' | 'education' | 'transfer';
 
@@ -29,7 +31,11 @@ const MobileApp = () => {
     savings: <SavingsScreen onNavigate={setCurrentScreen} />,
     'ai-chat': <AIChatScreen onClose={() => setCurrentScreen('dashboard')} />,
     education: <EducationScreen onNavigate={setCurrentScreen} />,
-    transfer: <TransferScreen onNavigate={setCurrentScreen} />
+    transfer: (
+      <ErrorBoundary>
+        <TransferScreen onNavigate={setCurrentScreen} />
+      </ErrorBoundary>
+    )
   };
 
   return (
@@ -318,74 +324,310 @@ const EducationScreen = ({ onNavigate }: { onNavigate: (screen: Screen) => void 
   </div>
 );
 
-const TransferScreen = ({ onNavigate }: { onNavigate: (screen: Screen) => void }) => (
-  <div className="p-6 pb-24 min-h-screen bg-background">
-    {/* Header */}
-    <div className="flex items-center mb-6">
-      <Button variant="ghost" onClick={() => onNavigate('dashboard')} className="mr-3 p-2">
-        <ChevronRight className="w-5 h-5 rotate-180" />
-      </Button>
-      <h2 className="text-xl font-semibold">Transferir</h2>
-    </div>
+const TransferScreen = ({ onNavigate }: { onNavigate: (screen: Screen) => void }) => {
+  const {
+    isConnected,
+    isConnecting,
+    publicKey,
+    account,
+    connect,
+    disconnect,
+    isTransactionPending,
+    lastTransaction,
+    sendPayment,
+    validateAddress,
+    getBalance,
+    error,
+    clearError
+  } = useStellarWallet();
 
-    {/* Quick Send */}
-    <div className="mb-6">
-      <p className="text-sm text-muted-foreground mb-3">Contactos frecuentes</p>
-      <div className="flex space-x-4">
-        {[
-          { name: 'Carlos', avatar: '👨‍🎓' },
-          { name: 'María', avatar: '👩‍🎓' },
-          { name: 'Luis', avatar: '👨‍💻' },
-          { name: 'Ana', avatar: '👩‍🎨' }
-        ].map((contact) => (
-          <div key={contact.name} className="text-center">
-            <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center mb-2 text-xl">
-              {contact.avatar}
+  const [destination, setDestination] = useState('');
+  const [amount, setAmount] = useState('');
+  const [selectedAsset, setSelectedAsset] = useState<'XLM' | 'USDC' | 'MXN'>('XLM');
+  const [memo, setMemo] = useState('');
+  const [isValidAddress, setIsValidAddress] = useState(false);
+  const [balance, setBalance] = useState('0');
+
+  // Validate address when destination changes
+  useEffect(() => {
+    if (destination.trim()) {
+      validateAddress(destination.trim()).then(setIsValidAddress);
+    } else {
+      setIsValidAddress(false);
+    }
+  }, [destination, validateAddress]);
+
+  // Get balance when asset changes
+  useEffect(() => {
+    if (isConnected && publicKey) {
+      getBalance(selectedAsset).then(setBalance);
+    }
+  }, [selectedAsset, isConnected, publicKey, getBalance]);
+
+  const handleSend = async () => {
+    if (!isValidAddress || !amount || parseFloat(amount) <= 0) return;
+
+    try {
+      const result = await sendPayment({
+        destination: destination.trim(),
+        amount: amount,
+        asset: selectedAsset,
+        memo: memo.trim()
+      });
+
+      if (result.success) {
+        // Reset form
+        setDestination('');
+        setAmount('');
+        setMemo('');
+        // Refresh balance
+        getBalance(selectedAsset).then(setBalance);
+      }
+    } catch (err) {
+      console.error('Send failed:', err);
+    }
+  };
+
+  const formatBalance = (balance: string) => {
+    const num = parseFloat(balance);
+    return num.toFixed(4);
+  };
+
+  const getAssetSymbol = (asset: string) => {
+    switch (asset) {
+      case 'XLM': return 'XLM';
+      case 'USDC': return 'USDC';
+      case 'MXN': return 'MXN';
+      default: return asset;
+    }
+  };
+
+  return (
+    <div className="p-6 pb-24 min-h-screen bg-background">
+      {/* Header */}
+      <div className="flex items-center mb-6">
+        <Button variant="ghost" onClick={() => onNavigate('dashboard')} className="mr-3 p-2">
+          <ChevronRight className="w-5 h-5 rotate-180" />
+        </Button>
+        <h2 className="text-xl font-semibold">Transferir</h2>
+      </div>
+
+      {/* Freighter Installation Info */}
+      {!isConnected && (
+        <Card className="p-4 rounded-2xl shadow-card mb-6 bg-blue-50 border-blue-200">
+          <div className="text-center">
+            <h3 className="text-sm font-semibold text-blue-800 mb-2">¿Qué es Freighter?</h3>
+            <p className="text-xs text-blue-700 mb-3">
+              Freighter es una extensión de navegador que te permite interactuar con la red Stellar de forma segura.
+            </p>
+            <div className="text-xs text-blue-600 space-y-1">
+              <p>• Instala la extensión desde freighter.app</p>
+              <p>• Crea una cuenta en Stellar Testnet</p>
+              <p>• Obtén XLM de prueba del faucet</p>
             </div>
-            <p className="text-xs text-muted-foreground">{contact.name}</p>
           </div>
-        ))}
-      </div>
-    </div>
+        </Card>
+      )}
 
-    {/* Transfer Form */}
-    <Card className="p-6 rounded-2xl shadow-card space-y-4">
-      <div>
-        <label className="text-sm font-medium text-foreground mb-2 block">Destinatario</label>
-        <input
-          type="text"
-          placeholder="Buscar contacto o wallet..."
-          className="w-full p-3 border border-border rounded-xl bg-background"
-        />
-      </div>
-      
-      <div>
-        <label className="text-sm font-medium text-foreground mb-2 block">Monto</label>
-        <div className="relative">
+      {/* Wallet Connection Status */}
+      <Card className="p-4 rounded-2xl shadow-card mb-6">
+        {!isConnected ? (
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-3">
+              Conecta tu wallet Stellar para enviar pagos
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Requiere la extensión Freighter instalada
+            </p>
+            <Button 
+              onClick={connect} 
+              disabled={isConnecting}
+              className="w-full bg-gradient-primary"
+            >
+              {isConnecting ? 'Conectando...' : 'Conectar Freighter'}
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              <a href="https://freighter.app/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                Instalar Freighter →
+              </a>
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Wallet conectada</p>
+                <p className="text-xs font-mono text-foreground">
+                  {typeof publicKey === 'string' ? `${publicKey.slice(0, 8)}...${publicKey.slice(-8)}` : 'N/A'}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={disconnect}>
+                Desconectar
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Red: Stellar Testnet
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Error Display */}
+      {error && (
+        <Card className="p-4 rounded-2xl shadow-card mb-6 bg-destructive/10 border-destructive/20">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="ghost" size="sm" onClick={clearError}>
+              ✕
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Transaction Success */}
+      {lastTransaction?.success && (
+        <Card className="p-4 rounded-2xl shadow-card mb-6 bg-green-500/10 border-green-500/20">
+          <div className="text-center">
+            <p className="text-sm text-green-600 font-semibold mb-2">¡Transacción exitosa!</p>
+            <p className="text-xs text-green-600 font-mono">
+              Hash: {lastTransaction.transactionHash?.slice(0, 16)}...
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Asset Selection */}
+      <Card className="p-4 rounded-2xl shadow-card mb-6">
+        <h3 className="text-sm font-medium text-foreground mb-3">Seleccionar activo</h3>
+        <div className="grid grid-cols-3 gap-2">
+          {(['XLM', 'USDC', 'MXN'] as const).map((asset) => (
+            <Button
+              key={asset}
+              variant={selectedAsset === asset ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedAsset(asset)}
+              className={selectedAsset === asset ? "bg-gradient-primary" : ""}
+            >
+              {asset}
+            </Button>
+          ))}
+        </div>
+        {isConnected && (
+          <div className="mt-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              Balance: {formatBalance(balance)} {getAssetSymbol(selectedAsset)}
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* Transfer Form */}
+      <Card className="p-6 rounded-2xl shadow-card space-y-4">
+        <div>
+          <label className="text-sm font-medium text-foreground mb-2 block">
+            Dirección de destino
+          </label>
           <input
-            type="number"
-            placeholder="0.00"
-            className="w-full p-3 border border-border rounded-xl bg-background text-right text-2xl font-semibold"
+            type="text"
+            placeholder="GDQNY3PBO... (Stellar address)"
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            className={`w-full p-3 border rounded-xl bg-background ${
+              destination && !isValidAddress 
+                ? 'border-destructive' 
+                : destination && isValidAddress 
+                ? 'border-green-500' 
+                : 'border-border'
+            }`}
           />
-          <span className="absolute left-3 top-3 text-muted-foreground">MXN $</span>
+          {destination && !isValidAddress && (
+            <p className="text-xs text-destructive mt-1">Dirección inválida</p>
+          )}
+          {destination && isValidAddress && (
+            <p className="text-xs text-green-600 mt-1">✓ Dirección válida</p>
+          )}
+        </div>
+        
+        <div>
+          <label className="text-sm font-medium text-foreground mb-2 block">Monto</label>
+          <div className="relative">
+            <input
+              type="number"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              step="0.0000001"
+              className="w-full p-3 border border-border rounded-xl bg-background text-right text-2xl font-semibold"
+            />
+            <span className="absolute left-3 top-3 text-muted-foreground">
+              {getAssetSymbol(selectedAsset)}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Máximo: {formatBalance(balance)} {getAssetSymbol(selectedAsset)}
+          </p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-foreground mb-2 block">
+            Memo (opcional)
+          </label>
+          <input
+            type="text"
+            placeholder="Descripción del pago..."
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            className="w-full p-3 border border-border rounded-xl bg-background"
+            maxLength={28}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            {memo.length}/28 caracteres
+          </p>
+        </div>
+
+        <Button 
+          onClick={handleSend}
+          disabled={!isConnected || !isValidAddress || !amount || parseFloat(amount) <= 0 || isTransactionPending}
+          className="w-full py-6 rounded-xl bg-gradient-primary text-lg font-semibold mt-6"
+        >
+          {isTransactionPending 
+            ? 'Procesando...' 
+            : `Enviar ${amount || '0.00'} ${getAssetSymbol(selectedAsset)}`
+          }
+        </Button>
+      </Card>
+
+      {/* Quick Send Contacts */}
+      <div className="mt-6">
+        <p className="text-sm text-muted-foreground mb-3">Direcciones frecuentes</p>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { name: 'Carlos', address: 'GDQNY3PBO...', avatar: '👨‍🎓' },
+            { name: 'María', address: 'GDMGQBDB2F...', avatar: '👩‍🎓' },
+            { name: 'Luis', address: 'GBBD47IF6L...', avatar: '👨‍💻' },
+            { name: 'Ana', address: 'GDMGQBDB2F...', avatar: '👩‍🎨' }
+          ].map((contact) => (
+            <div 
+              key={contact.name} 
+              className="p-3 border border-border rounded-xl bg-background cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => setDestination(contact.address)}
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-primary rounded-full flex items-center justify-center text-sm">
+                  {contact.avatar}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{contact.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{contact.address}</p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-
-      <div>
-        <label className="text-sm font-medium text-foreground mb-2 block">Nota (opcional)</label>
-        <input
-          type="text"
-          placeholder="Para qué es este pago..."
-          className="w-full p-3 border border-border rounded-xl bg-background"
-        />
-      </div>
-
-      <Button className="w-full py-6 rounded-xl bg-gradient-primary text-lg font-semibold mt-6">
-        Enviar $0.00
-      </Button>
-    </Card>
-  </div>
-);
+    </div>
+  );
+};
 
 // Helper Components
 const ActionCard = ({ icon, title, subtitle, onClick, className }: any) => (
