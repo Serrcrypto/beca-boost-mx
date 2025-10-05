@@ -475,11 +475,27 @@ const TransferScreen = ({ onNavigate }: { onNavigate: (screen: Screen) => void }
       {/* Error Display */}
       {error && (
         <Card className="p-4 rounded-2xl shadow-card mb-6 bg-destructive/10 border-destructive/20">
-          <div className="flex items-center justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-destructive font-medium">Error</p>
+              <Button variant="ghost" size="sm" onClick={clearError}>
+                ✕
+              </Button>
+            </div>
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="ghost" size="sm" onClick={clearError}>
-              ✕
-            </Button>
+            
+            {/* Show help for account creation */}
+            {error.includes('no existe en la red de testnet') && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-800 mb-2">¿Cómo crear tu cuenta?</h4>
+                <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                  <li>Ve a <a href="https://laboratory.stellar.org/#account-creator?network=test" target="_blank" rel="noopener noreferrer" className="underline">Stellar Laboratory</a></li>
+                  <li>Genera un nuevo par de claves</li>
+                  <li>Usa el faucet para obtener XLM gratuito</li>
+                  <li>Importa la cuenta en Freighter</li>
+                </ol>
+              </div>
+            )}
           </div>
         </Card>
       )}

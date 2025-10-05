@@ -94,8 +94,17 @@ export const useStellarWallet = (): UseStellarWalletReturn => {
     if (!publicKey) return;
     
     try {
+      // First check if account exists
+      const accountExists = await stellarService.checkAccountExists(publicKey);
+      if (!accountExists) {
+        setError(`Tu cuenta ${publicKey} no existe en la red de testnet. Necesitas crear la cuenta primero. Visita el faucet de testnet para obtener XLM gratuito.`);
+        setAccount(null);
+        return;
+      }
+      
       const accountInfo = await stellarService.getAccountInfo(publicKey);
       setAccount(accountInfo);
+      setError(null); // Clear any previous errors
     } catch (err: any) {
       setError(err.message || 'Failed to refresh account');
     }
@@ -132,8 +141,16 @@ export const useStellarWallet = (): UseStellarWalletReturn => {
         throw new Error('Invalid destination address');
       }
 
+      // Check if source account exists
+      if (publicKey) {
+        const accountExists = await stellarService.checkAccountExists(publicKey);
+        if (!accountExists) {
+          throw new Error(`Tu cuenta no existe en la red de testnet. Necesitas crear la cuenta primero con al menos 1 XLM desde el faucet de testnet.`);
+        }
+      }
+
       // Send payment
-      const result = await stellarService.sendPayment(params);
+      const result = await stellarService.sendPayment(params, publicKey);
       setLastTransaction(result);
       
       if (result.success) {
@@ -155,7 +172,7 @@ export const useStellarWallet = (): UseStellarWalletReturn => {
     } finally {
       setIsTransactionPending(false);
     }
-  }, [validateAddress, refreshAccount]);
+  }, [validateAddress, refreshAccount, publicKey]);
 
   const clearError = useCallback(() => {
     setError(null);

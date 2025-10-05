@@ -64,6 +64,7 @@ export interface TransactionParams {
   amount: string;
   asset: keyof typeof STELLAR_ASSETS;
   memo?: string;
+  publicKey?: string;
 }
 
 export interface TransactionResult {
@@ -160,8 +161,14 @@ class StellarService {
           asset_issuer: balance.asset_issuer
         }))
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching account info:', error);
+      
+      // Check if it's a 404 error (account not found)
+      if (error.status === 404 || error.message?.includes('Not Found')) {
+        throw new Error(`La cuenta ${publicKey} no existe en la red de testnet. Necesitas crear la cuenta primero con al menos 1 XLM.`);
+      }
+      
       throw new Error('Failed to fetch account information');
     }
   }
@@ -188,12 +195,16 @@ class StellarService {
 
   async buildTransaction(params: TransactionParams): Promise<string> {
     try {
-      const addressResponse = await getAddress();
-      if (addressResponse.error || !addressResponse.address) {
-        throw new Error('Wallet not connected');
-      }
+      // Use provided publicKey or try to get it from wallet
+      let publicKey = params.publicKey;
       
-      const publicKey = addressResponse.address;
+      if (!publicKey) {
+        const addressResponse = await getAddress();
+        if (addressResponse.error || !addressResponse.address) {
+          throw new Error('Wallet not connected');
+        }
+        publicKey = addressResponse.address;
+      }
 
       // Load account
       const account = await this.server.loadAccount(publicKey);
@@ -220,21 +231,71 @@ class StellarService {
         .build();
 
       // Sign transaction
-      const signedTransaction = await signTransaction(transaction.toXDR(), {
+      console.log('Signing transaction with XDR:', transaction.toXDR());
+      const signResult = await signTransaction(transaction.toXDR(), {
         networkPassphrase: TESTNET_NETWORK_PASSPHRASE,
         accountToSign: publicKey,
       });
-
-      return signedTransaction;
-    } catch (error) {
+      
+      console.log('Sign result type:', typeof signResult);
+      console.log('Sign result:', signResult);
+      console.log('Sign result keys:', Object.keys(signResult || {}));
+      
+      // Check if signing was successful
+      if (signResult && signResult.error) {
+        throw new Error(`Error signing transaction: ${signResult.error}`);
+      }
+      
+      // Handle different response formats
+      let signedTransactionXDR;
+      if (typeof signResult === 'string') {
+        // If it's already a string (XDR), use it directly
+        signedTransactionXDR = signResult;
+      } else if (signResult && signResult.signedTxXdr) {
+        // If it's an object with signedTxXdr property (Freighter format)
+        signedTransactionXDR = signResult.signedTxXdr;
+      } else if (signResult && signResult.signedTransaction) {
+        // If it's an object with signedTransaction property
+        signedTransactionXDR = signResult.signedTransaction;
+      } else if (signResult && signResult.xdr) {
+        // If it's an object with xdr property
+        signedTransactionXDR = signResult.xdr;
+      } else {
+        console.error('Unexpected signTransaction response format:', signResult);
+        throw new Error('No signed transaction received from wallet');
+      }
+      
+      console.log('Final signed transaction XDR:', signedTransactionXDR);
+      return signedTransactionXDR;
+    } catch (error: any) {
       console.error('Error building transaction:', error);
+      
+      // Check if it's a 404 error (account not found)
+      if (error.status === 404 || error.message?.includes('Not Found')) {
+        throw new Error(`La cuenta ${params.publicKey || 'actual'} no existe en la red de testnet. Necesitas crear la cuenta primero con al menos 1 XLM desde el faucet de testnet.`);
+      }
+      
       throw new Error('Failed to build transaction');
     }
   }
 
   async submitTransaction(signedTransactionXDR: string): Promise<TransactionResult> {
     try {
-      const result = await this.server.submitTransaction(signedTransactionXDR);
+      console.log('Submitting transaction XDR:', signedTransactionXDR);
+      console.log('XDR length:', signedTransactionXDR.length);
+      console.log('XDR type:', typeof signedTransactionXDR);
+      
+      // Parse the transaction to validate it before submission
+      let transaction;
+      try {
+        transaction = TransactionBuilder.fromXDR(signedTransactionXDR, TESTNET_NETWORK_PASSPHRASE);
+        console.log('Parsed transaction successfully:', transaction);
+      } catch (parseError) {
+        console.error('Error parsing transaction XDR:', parseError);
+        throw new Error('Invalid transaction format');
+      }
+      
+      const result = await this.server.submitTransaction(transaction);
       
       return {
         success: true,
@@ -250,9 +311,10 @@ class StellarService {
     }
   }
 
-  async sendPayment(params: TransactionParams): Promise<TransactionResult> {
+  async sendPayment(params: TransactionParams, publicKey?: string): Promise<TransactionResult> {
     try {
-      const signedTransaction = await this.buildTransaction(params);
+      const transactionParams = { ...params, publicKey };
+      const signedTransaction = await this.buildTransaction(transactionParams);
       return await this.submitTransaction(signedTransaction);
     } catch (error: any) {
       return {
@@ -268,6 +330,18 @@ class StellarService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async checkAccountExists(address: string): Promise<boolean> {
+    try {
+      await this.server.loadAccount(address);
+      return true;
+    } catch (error: any) {
+      if (error.status === 404 || error.message?.includes('Not Found')) {
+        return false;
+      }
+      throw error;
     }
   }
 
