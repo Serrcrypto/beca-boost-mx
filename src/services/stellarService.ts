@@ -105,7 +105,8 @@ class StellarService {
       if (!isBrowser) {
         return false;
       }
-      return await isConnected();
+      const connectionStatus = await isConnected();
+      return connectionStatus.isConnected;
     } catch (error) {
       console.error('Error checking wallet connection:', error);
       return false;
@@ -122,20 +123,24 @@ class StellarService {
       }
       
       // Request access to Freighter
-      await requestAccess();
+      const accessResponse = await requestAccess();
       
-      // Get public key
-      const publicKey = await getAddress();
+      if (accessResponse.error) {
+        throw new Error(`Error requesting access: ${accessResponse.error}`);
+      }
       
-      if (!publicKey || typeof publicKey !== 'string') {
+      if (!accessResponse.address || typeof accessResponse.address !== 'string') {
         throw new Error('No valid public key received from wallet');
       }
 
-      return publicKey;
+      return accessResponse.address;
     } catch (error) {
       console.error('Error connecting wallet:', error);
       if (error instanceof Error && error.message.includes('not available')) {
         throw new Error('Freighter wallet no está disponible. Por favor instala la extensión Freighter desde freighter.app');
+      }
+      if (error instanceof Error && error.message.includes('User rejected')) {
+        throw new Error('El usuario rechazó la conexión con la wallet');
       }
       throw new Error('No se pudo conectar con Freighter. Asegúrate de que la extensión esté instalada y desbloqueada.');
     }
@@ -183,10 +188,12 @@ class StellarService {
 
   async buildTransaction(params: TransactionParams): Promise<string> {
     try {
-      const publicKey = await getAddress();
-      if (!publicKey) {
+      const addressResponse = await getAddress();
+      if (addressResponse.error || !addressResponse.address) {
         throw new Error('Wallet not connected');
       }
+      
+      const publicKey = addressResponse.address;
 
       // Load account
       const account = await this.server.loadAccount(publicKey);
